@@ -10,4 +10,6 @@ You can read the final html https://mcastrol.github.io/dataScienceCaptoneProject
 - DCCaptoneProject_FirstPart.html: renden Html to see directly from git
 - full-list-of-bad-words-text-file_2018_03_26.txt: bad word excluded from the analysis
 
+Input data can be getted in https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
 
