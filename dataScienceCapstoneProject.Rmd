@@ -1,0 +1,198 @@
+---
+title: "dataScienceCapstoneProject"
+author: "Marcela Castro León"
+date: "April 28, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+## Introduction 
+Loading libraries
+
+```{r, echo=FALSE, warning=FALSE}
+library(NLP)
+library(tm)
+library(SnowballC)
+library(stringi)
+library(ggplot2)
+library(RColorBrewer)
+library(wordcloud)
+library(RWeka)
+library(slam)
+setwd("~/MEGA/MEGAsync/DATA-SCIENCE/work/C10CAPSTONE/dataScienceCaptoneProject/dataScienceCaptoneProject")
+```
+The original files are data comming from blogs, news and twitter in english language. The files are quite large, 8.9, 10.1 and 23.6 millons of records for blogs, news and twitter respectively. All of them have more than 30 millons of words. In this part we read the files and select randomly 10% of the lines.
+
+```{r, warning=FALSE, echo=FALSE}
+readSampleFile<-function(fileName) {
+  paste("Reading 20% sample of file ",fileName)
+  con=file(fileName,open="r")
+  qtotlines<-0     # number of total lines
+  qselectedlines <-0   #number of total selected lines
+  qtotchar<-0     # number of total chars in file
+  qcharselectedlines <-0   #number of total char in selected lines
+  finaldata<-NULL
+  block=5000
+  longmaxline=0;
+  while ( TRUE ) {
+      line = readLines(con, n = block,skipNul=TRUE)
+      if ( length(line) == 0 ) {
+          break
+      }
+      if(sample(1:10,1)==5) {  #random 1:5==5 to select 20% of the lines
+          qselectedlines<-qselectedlines+block
+          qcharselectedlines<-qcharselectedlines+sum(lengths(strsplit(line, "\\W+")))
+          finaldata<-c(finaldata,line)
+      }
+      lenline=max(nchar(line))
+      if(lenline > longmaxline) {
+        longmaxline=lenline
+      }
+      qtotlines <- qtotlines+block
+      qtotchar<-qtotchar+sum(lengths(strsplit(line, "\\W+")))
+  }
+cat(sprintf("File: %s Lines: %.2fM Selected: %.2fM Chars: %.2fM  Selected: %.2fM Max Line %d\n ", fileName, qtotlines/1000000,qselectedlines/1000000,qtotchar/1000000,qcharselectedlines/1000000,longmaxline))
+close(con)
+return(finaldata)
+}
+
+input_sample_file="final_data.txt"
+if(!file.exists(input_sample_file)){
+    us_blogs <- readSampleFile("final/en_US/en_US.blogs.txt")
+    us_news  <- readSampleFile("final/en_US/en_US.news.txt")
+    us_twitter  <- readSampleFile("final/en_US/en_US.twitter.txt")
+    final_data=c(us_blogs,us_news, us_twitter)
+    writeLines(final_data, "final_data.txt")
+    } else {
+  final_data<-readLines(input_sample_file, encoding = "UTF-8", skipNul=TRUE)
+}
+```
+
+## Exploring and cleaning final input data 
+
+After reading and selecting 10% of lines of original input data comming from US blogs, news and twitter, we explore the raw lines and chars we have for our analysis.
+
+```{r, echo=TRUE, warning=FALSE}
+print("General stats for sample final data")
+stri_stats_general(final_data)
+```
+
+Using tm package, we create the Corpus object and clean the data by 
+*convert to lower case
+*remove puntuation  
+*remove numbers
+*remove extra whitespaces 
+*remove common english words
+
+We create a document term matrix to calculate the frequency of each word and a wordclod is plotted.
+A sample of 10K lines are choosed in order ti be able to generate the mat
+
+```{r, echo=TRUE, warning=FALSE}
+#we select a 000 lines to be able to create the matrix
+profanityWords <- read.table("./full-list-of-bad-words-text-file_2018_03_26.txt", header = FALSE)
+final_data_sample = sample(final_data,5000, replace = FALSE)
+final_data_cleaned <- VCorpus(VectorSource(final_data_sample))
+final_data_cleaned <- tm_map(final_data_cleaned, content_transformer(tolower))
+final_data_cleaned <- tm_map(final_data_cleaned, content_transformer(tolower))
+final_data_cleaned <- tm_map(final_data_cleaned, content_transformer(removePunctuation))
+final_data_cleaned <- tm_map(final_data_cleaned, stripWhitespace)
+final_data_cleaned <- tm_map(final_data_cleaned, removeWords, stopwords("english"))
+#final_data_cleaned <- tm_map(final_data_cleaned, removeWords, unlist(profanityWords))
+final_data_cleaned <- tm_map(final_data_cleaned, removeNumbers)
+removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
+final_data_cleaned <- tm_map(final_data_cleaned,  content_transformer(removeURL))
+BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+TrigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+
+dtm<-DocumentTermMatrix(final_data_cleaned)
+dtm_bigram <- DocumentTermMatrix(final_data_cleaned, control = list(tokenize = BigramTokenizer, stemming = TRUE))
+
+dtm_trigram <- DocumentTermMatrix(final_data_cleaned, control = list(tokenize = TrigramTokenizer, stemming = TRUE))
+
+dtmmat<-as.matrix(dtm)
+freq<-colSums(dtmmat)
+freq<-sort(freq,decreasing = TRUE)
+words<-names(freq)
+wordcloud(words[1:100],freq[1:100])
+
+dtmmat_bigram<-as.matrix(dtm_bigram)
+freq_bigram<-colSums(dtmmat_bigram)
+freq_bigram<-sort(freq_bigram,decreasing = TRUE)
+words_bigram<-names(freq_bigram)
+wordcloud(words_bigram[1:100],freq_bigram[1:100])
+
+dtmmat_trigram<-as.matrix(dtm_trigram)
+freq_trigram<-colSums(dtmmat_trigram)
+freq_trigram<-sort(freq_trigram,decreasing = TRUE)
+words_trigram<-names(freq_trigram)
+wordcloud(words_trigram[1:100],freq_trigram[1:100])
+```
+
+Plot histograms
+
+```{r, echo=TRUE, warning=FALSE}
+unigram_freq <- rowapply_simple_triplet_matrix(dtm,sum)
+bigram_freq <- rowapply_simple_triplet_matrix(dtm_bigram,sum)
+trigram_freq <- rowapply_simple_triplet_matrix(dtm_trigram,sum)
+par(mfrow = c(1,3), oma=c(0,0,3,0))
+hist(unigram_freq, breaks = 50, main = 'unigram freq', xlab='frequency')
+hist(bigram_freq, breaks = 50, main = 'bigram freq', xlab='frequency')
+hist(trigram_freq, breaks = 50, main = 'trigram freq', xlab='frequency')
+title("NGram Histograms",outer=T)
+
+num <- 30
+unigramdf <- head(data.frame(terms=names(freq), freq=freq),n=num) 
+bigramdf <- head(data.frame(terms=names(freq_bigram), freq=freq_bigram),n=num)
+trigramdf <- head(data.frame(terms=names(freq_trigram), freq=freq_trigram),n=num)
+
+#Plot 1 - Unigram
+plot1 <-ggplot(unigramdf,aes(terms, freq))   
+plot1 <- plot1 + geom_bar(fill="white", colour=unigramdf$freq,stat="identity") + scale_x_discrete(limits=unigramdf$terms)
+plot1 <- plot1 + theme(axis.text.x=element_text(angle=45, hjust=1))  
+plot1 <- plot1 + labs(x = "Terms", y="Frequency", title="Top 30 Unigrams in Sample")
+plot1  
+plot2 <-ggplot(bigramdf,aes(terms, freq))   
+plot2 <- plot2 + geom_bar(fill="white", colour=bigramdf$freq,stat="identity") + scale_x_discrete(limits=bigramdf$terms)
+plot2 <- plot2 + theme(axis.text.x=element_text(angle=45, hjust=1))  
+plot2 <- plot2 + labs(x = "Terms", y="Frequency", title="Top 30 Bigrams in Sample")
+plot2
+plot3 <-ggplot(trigramdf,aes(terms, freq))   
+plot3 <- plot3 + geom_bar(fill="white", colour=trigramdf$freq,stat="identity") + scale_x_discrete(limits=trigramdf$terms)
+plot3 <- plot3 + theme(axis.text.x=element_text(angle=45, hjust=1))  
+plot3 <- plot3 + labs(x = "Terms", y="Frequency", title="Top 30 Trigrams in Sample")
+plot3
+```
+
+The histograms are skewed.
+We analize how many word most frequency words we need to cover the 50% of total words.
+
+```{r, echo=TRUE, warning=FALSE}
+#Words in freq
+length(freq)
+#sum of frequencies
+freqtot<-sum(freq)
+freqtot
+#sum freq of first 200 words
+freq150<-sum(freq[1:150])
+#Ratio distribution
+150/length(freq)
+freq150/freqtot
+calcfreq <- function(freq, i) {
+    freqtot<-sum(freq)
+    freqtot
+    freqi<-sum(freq[1:i])
+    ratio<-i/length(freq)
+    coverage<-freqi/freqtot
+    cat(sprintf("Tot words: %d Analized (top frequency) %d words Ratio=%.2f Coverage %.2f\n",length(freq),i,ratio,coverage))
+}    
+for (i in seq(100,1000,100)) {
+  calcfreq(freq,i) 
+}
+
+
+```
+
+
