@@ -1,0 +1,12 @@
+name: guessing_next_word
+title: guessing_next_word
+username:
+account: mcastrol
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 339558
+bundleId: 1363130
+url: https://mcastrol.shinyapps.io/guessing_next_word/
+when: 1525802935.58759
+asMultiple: FALSE
+asStatic: FALSE

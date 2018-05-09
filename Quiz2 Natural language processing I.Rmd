@@ -8,89 +8,58 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
 ```{r, warning=FALSE, echo=FALSE}
-suppressMessages(library(ggplot2))
-suppressMessages(library(NLP))
+library(NLP)
 library(tm)
-library(SnowballC)
-library(stringi)
-library(RColorBrewer)
-library(wordcloud)
-library(RWeka)
-library(slam)
-```
+#read input files
+#no input
+#returns the union of all the inputs (totlines)
+unigram <- readRDS("unigram.RData")
+bigram <- readRDS("bigram_nostopwords.RData")
+trigram <- readRDS("trigram_nostopwords.RData")
+quagram <- readRDS("quagram_nostopwords.RData")
 
-```{r, warning=FALSE, echo=FALSE}
-filterVchar<-function(totlines,stringToMatch) {
-  match<-totlines[grepl(stringToMatch,totlines)]
-  cat(sprintf("Lines: %d with string %s Lines=%d\n ",length(totlines), stringToMatch, length(match)))
-return(match)
-}
-
-getFinalMatch2<-function(stringToMatch) {
-  #in_blogs <- readLines("final/en_US/en_US.blogs.txt",skipNul=TRUE)
-  #in_news  <- readLines("final/en_US/en_US.news.txt",skipNul=TRUE)
-  #in_twitter  <- readLines("final/en_US/en_US.twitter.txt",skipNul=TRUE)
-  #totlines<-c(in_blogs,in_news, in_twitter)
-  final_match=filterVchar(totlines,stringToMatch)
-  print("General stats for final match")
-  stri_stats_general(final_match)
-  return(final_match)
-}
-
-readFilterFile<-function(fileName,stringToMatch) {
-  cat(sprintf("Selecting lines with %s in %s\n",stringToMatch, fileName))
-  totlines<-readLines(fileName,skipNul=TRUE)
-  match<-totlines[grepl(stringToMatch,totlines)]
-  cat(sprintf("File: %s Lines: %d with string %s Lines=%d\n ",  basename(fileName), length(totlines), stringToMatch, length(match)))
-return(match)
-}
-
-getFinalMatch<-function(stringToMatch) {
-  in_blogs <- readFilterFile("final/en_US/en_US.blogs.txt",stringToMatch)
-  in_news  <- readFilterFile("final/en_US/en_US.news.txt",stringToMatch)
-  in_twitter  <- readFilterFile("final/en_US/en_US.twitter.txt",stringToMatch)
-  final_match=c(in_blogs,in_news, in_twitter)
-  print("General stats for final match")
-  stri_stats_general(final_match)
-  return(final_match)
-}
-
-getCleanedCorpus<-function(final_match) {
-  set.seed(1234)
-  final_data_sample<-final_match
-  #creating corpus object to use tn functions
-  final_data_cleaned <- VCorpus(VectorSource(final_data_sample))
-  #cleaning operations on sample text: lower, remove punctuation, remove common words, etc
-  final_data_cleaned <- tm_map(final_data_cleaned, content_transformer(tolower))
-  final_data_cleaned <- tm_map(final_data_cleaned, content_transformer(removePunctuation))
-  final_data_cleaned <- tm_map(final_data_cleaned, stripWhitespace)
-  final_data_cleaned <- tm_map(final_data_cleaned, removeWords, stopwords("english"))
-  final_data_cleaned <- tm_map(final_data_cleaned, removeNumbers)
-  removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
-  final_data_cleaned <- tm_map(final_data_cleaned,  content_transformer(removeURL))
-  return(final_data_cleaned)
-}
-
-getFreqVector<-function(final_data_cleaned, num_grams) {
-  BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
-  TrigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
-  QuagramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
-  QuigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 5, max = 5))
-  if(num_grams==2)  {funtoken<-BigramTokenizer}
-  else if(num_grams==3) {funtoken<-TrigramTokenizer}
-  else if(num_grams==4) {funtoken<-QuagramTokenizer}
-  else {funtoken<-QuigramTokenizer}
-  dtm <- DocumentTermMatrix(final_data_cleaned, control = list(tokenize = funtoken, stemming = TRUE))  
-  dtmmat<-as.matrix(dtm)
-  freq<-colSums(dtmmat)
-  freq<-sort(freq,decreasing = TRUE)
-  return(freq)
+average_frequency<-function(sentence)  {
+  sentence_c<-removeWords(sentence,stopwords('en'))
+  sentence_c<-stripWhitespace(removeNumbers(removePunctuation(tolower(sentence_c),preserve_intra_word_dashes = TRUE)))
+  sentence_split<- strsplit(sentence_c," ")[[1]]
+  qwords<-length(sentence_split)
+  tot_frequency<-0
+  for (i in c(1,2,3,4)) {
+    weight_i<-i/10
+    last_words<-tail(sentence_split,i)
+    #print(last_words)
+    if(i==1) {
+        freq<-as.integer(head((unigram[unigram$word1==last_words[1],])$freq,1))
+    }
+    else  
+    if(i==2) {
+        freq<-as.integer(head((bigram[bigram$word1==last_words[1] 
+                                      & bigram$word2 == last_words[2]                               
+                                      ,])$freq,1))
+        
+    } else if(i==3) {
+        freq<-as.integer(head((trigram[trigram$word1==last_words[1] 
+                                      & trigram$word2 == last_words[2]
+                                      & trigram$word3 == last_words[3]
+                                      ,])$freq,1))
+    }
+    else if(i==4) {
+        freq<-as.integer(head((quagram[quagram$word1==last_words[1] 
+                                      & quagram$word2 == last_words[2]
+                                      & quagram$word3 == last_words[3]
+                                      & quagram$word4 == last_words[4]
+                                      ,])$freq,1))
+        
+    }
+    if(length(freq)==0) freq<-0
+    tot_frequency<-tot_frequency+(weight_i*freq)
+    #cat(sprintf("with %d words tot_frequency %.2f\n",i, tot_frequency))
+  }
+  #print(tot_frequency)
+  return(tot_frequency)
 }
 ```
-
-
 
 ## Question 1
 
@@ -107,16 +76,14 @@ The guy in front of me just bought a pound of bacon, a bouquet, and a case of
 - soda
 
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="([Aa]+ +[Cc]ase+ +[Oo]f+ +[^ ]+ )"
-test<-c('pretzels','cheese', 'beer', 'soda')
-final_match<-getFinalMatch2(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 3)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"The guy in front of me just bought a pound of bacon, a bouquet, and a case of"
+options<- c('pretzels','cheese', 'beer', 'soda')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
 
@@ -134,16 +101,14 @@ most
 
 universe
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="([Ww]ould+ +[Mm]ean+ +[Tt]he+ +[^ ]+ )"
-test<-c('world','best', 'most', 'universe')
-final_match<-getFinalMatch(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 3)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"You re the reason why I smile everyday. Can you follow me please? It would mean the"
+options<- c('world','best', 'most', ' universe')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
 
@@ -160,18 +125,18 @@ smelliest
 
 saddest
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="([Mm]ake+ +[Mm]e+ +[Tt]he+ +[^ ]+ )"
-test<-c('bluest','happiest', 'smelliest', 'saddest')
-final_match<-getFinalMatch2(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 4)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"Hey sunshine, can you follow me and make me the"
+options<- c('bluest','happiest', 'smelliest', 'saddest')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
+
+
 Answer: happiest
 
 
@@ -187,19 +152,16 @@ referees
 
 crowd
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="([Ss]truggling+ +[^ ])" 
-test<-c('players','defense', 'referees', 'crowd')
-final_match<-getFinalMatch2(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 3)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"Very early observations on the Bills game: Offense still struggling but the"
+options<- c('players','defense', 'referees', 'crowd')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
-
 Answer: defense
 
 ## Question 5
@@ -214,20 +176,17 @@ grocery
 
 beach
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="([Dd]ate+ +[Aa]t+ +[^ ]+ )"
-test<-c('movies','mall', 'grocery', 'beach')
-final_match<-getFinalMatch2(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 4)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"Go on a romantic date at the"
+options<- c('movies','mall', 'grocery', 'beach')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
-
-Answer:
+Answer: beach
 
 ## Question 6
 
@@ -241,16 +200,14 @@ horse
 
 phone
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="([Bb]e+ +[Oo]n+ +[Mm]y+ +[^ ]+ )"
-test<-c('motorcycle','way', 'horse', 'phone')
-final_match<-getFinalMatch2(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 4)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"Well I'm pretty sure my granny has some old bagpipes in her garage I'll dust them off and be on my"
+options<-c('motorcycle','way', 'horse', 'phone')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
 Answer: way
@@ -266,18 +223,18 @@ years
 
 weeks
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="([Qq]uite+ +[Ss]ome+ +[^ ]+ )"
-test<-c('time','thing', 'years', 'weeks')
-final_match<-getFinalMatch2(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 4)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"Ohhhhh #PointBreak is on tomorrow. Love that film and haven't seen it in quite some"
+options<-c('time','thing', 'years', 'weeks')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
+
 Answer: time
 
 ## Question 8
@@ -292,16 +249,14 @@ toes
 
 fingers
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="([Hh]is+ +[Ll]ittle+ +[^ ]+ )" 
-test<-c('little ears','little eyes', 'little toes', 'little fingers')
-final_match<-getFinalMatch2(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 3)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"After the ice bucket challenge Louis will push his long wet hair out of his eyes with his little"
+options<-c('ears','eyes', 'toes', 'fingers')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
 Answer: fingers
@@ -318,16 +273,14 @@ hard
 
 sad
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="[Dd]uring the bad"
-test<-c('worse','bad', 'hard', 'sad')
-final_match<-getFinalMatch2(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 2)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"Be grateful for the good times and keep the faith during the"
+options<-c('worse','bad', 'hard', 'sad')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
 Answer:bad
@@ -343,17 +296,16 @@ insane
 
 insensitive
 
-```{r, echo=TRUE, warning=FALSE}
-stringToMatch="([Mm]ust+ +[Bb]e+ +[^ ]+ )"
-test<-c('asleep','callous', 'insane', 'insensitive')
-final_match<-getFinalMatch2(stringToMatch)
-final_data_cleaned<-getCleanedCorpus(final_match)
-freq_trigram<-getFreqVector(final_data_cleaned, 2)  
-for (i in 1:length(test)) {
-  matches<-freq_trigram[grepl(test[i], names(freq_trigram))]
-  print(paste("Matches for ",test[i]))
-  print(matches)
+
+```{r, warning=FALSE, echo=FALSE}
+sentence<-"If this isn't the cutest thing you've ever seen, then you must be"
+options<-c('asleep','callous', 'insane', 'insensitive')
+for(i in 1:length(options)) {
+  sentence_n<-paste(sentence, options[i])
+  print(sentence_n)
+  a<-average_frequency(sentence_n)
+  print(a)
 }
 ```
 
-Answer:
+Answer: asleep
